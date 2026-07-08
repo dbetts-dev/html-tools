@@ -5,7 +5,7 @@ export default function HomeNav() {
         <span className="home-nav__arrow" aria-hidden="true">&#8592;</span>
         <span>axta tools</span>
       </a>
-      <span className="home-nav__meta">v1.1 · 2026-06-11</span>
+      <span className="home-nav__meta">v1.2 · 2026-07-08</span>
     </nav>
   )
 }

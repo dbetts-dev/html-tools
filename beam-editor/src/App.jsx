@@ -3,21 +3,19 @@ import { COLORS } from './lib/colors.js'
 import { wrapLon, LAT_CLAMP } from './lib/geodesy.js'
 import HomeNav from './components/HomeNav.jsx'
 import GlobeCanvas from './components/GlobeCanvas.jsx'
-import BeamList from './components/BeamList.jsx'
-import InfoBar from './components/InfoBar.jsx'
-import ControlPanel from './components/ControlPanel.jsx'
+import ParamPanel from './components/ParamPanel.jsx'
 
 export const MAX_BEAMS = 16
 
 const initialState = {
   cfg:        { satLon: 33, minElev: 5 },
-  beams:      [{ id: 1, boreLat: 20, boreLon: 33, major: 2.0, minor: 2.0, rot: 0, color: COLORS[0] }],
+  beams:      [{ id: 1, boreLat: 20, boreLon: 33, major: 2.0, minor: 2.0, rot: 0, elliptical: false, enabled: true, color: COLORS[0] }],
   selectedId: 1,
   nextId:     2,
 }
 
-function makeBeam(id, boreLat, boreLon, major, minor, rot) {
-  return { id, boreLat, boreLon, major, minor, rot, color: COLORS[(id - 1) % COLORS.length] }
+function makeBeam(id, boreLat, boreLon, major, minor, rot, elliptical = false) {
+  return { id, boreLat, boreLon, major, minor, rot, elliptical, enabled: true, color: COLORS[(id - 1) % COLORS.length] }
 }
 
 function reducer(state, action) {
@@ -25,14 +23,15 @@ function reducer(state, action) {
 
     case 'ADD_BEAM': {
       if (state.beams.length >= MAX_BEAMS) return state
-      const prev      = state.beams.at(-1)
-      const id        = state.nextId
-      const boreLon   = prev ? prev.boreLon : state.cfg.satLon
-      const major     = prev ? prev.major   : 2.0
-      const minor     = prev ? prev.minor   : 2.0
-      const rot       = prev ? prev.rot     : 0
-      const boreLat   = action.boreLat ?? 20
-      const beam      = makeBeam(id, boreLat, boreLon, major, minor, rot)
+      const prev       = state.beams.at(-1)
+      const id         = state.nextId
+      const boreLon    = prev ? prev.boreLon    : state.cfg.satLon
+      const major      = prev ? prev.major      : 2.0
+      const minor      = prev ? prev.minor      : 2.0
+      const rot        = prev ? prev.rot        : 0
+      const elliptical = prev ? prev.elliptical : false
+      const boreLat    = action.boreLat ?? 20
+      const beam       = makeBeam(id, boreLat, boreLon, major, minor, rot, elliptical)
       return { ...state, beams: [...state.beams, beam], selectedId: id, nextId: id + 1 }
     }
 
@@ -71,7 +70,6 @@ function reducer(state, action) {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const { cfg, beams, selectedId } = state
-  const selectedBeam = beams.find(b => b.id === selectedId) ?? null
 
   function handleCfgChange(key, value) {
     if (key === 'satLon') dispatch({ type: 'SET_SAT_LON', value })
@@ -95,30 +93,26 @@ export default function App() {
         <span className="ver">V2</span>
       </header>
 
-      <GlobeCanvas
-        cfg={cfg}
-        beams={beams}
-        selectedId={selectedId}
-        onSelect={id => dispatch({ type: 'SELECT_BEAM', id })}
-        onBeamRepoint={handleBeamRepoint}
-      />
+      <div id="main">
+        <ParamPanel
+          cfg={cfg}
+          beams={beams}
+          selectedId={selectedId}
+          onCfgChange={handleCfgChange}
+          onBeamChange={handleBeamChange}
+          onSelect={id => dispatch({ type: 'SELECT_BEAM', id })}
+          onAdd={() => dispatch({ type: 'ADD_BEAM' })}
+          onDelete={id => dispatch({ type: 'DELETE_BEAM', id })}
+        />
 
-      <BeamList
-        beams={beams}
-        selectedId={selectedId}
-        onSelect={id => dispatch({ type: 'SELECT_BEAM', id })}
-        onAdd={() => dispatch({ type: 'ADD_BEAM' })}
-        onDelete={id => dispatch({ type: 'DELETE_BEAM', id })}
-      />
-
-      <InfoBar cfg={cfg} selectedBeam={selectedBeam} />
-
-      <ControlPanel
-        cfg={cfg}
-        selectedBeam={selectedBeam}
-        onCfgChange={handleCfgChange}
-        onBeamChange={handleBeamChange}
-      />
+        <GlobeCanvas
+          cfg={cfg}
+          beams={beams}
+          selectedId={selectedId}
+          onSelect={id => dispatch({ type: 'SELECT_BEAM', id })}
+          onBeamRepoint={handleBeamRepoint}
+        />
+      </div>
     </div>
   )
 }

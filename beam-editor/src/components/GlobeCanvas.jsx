@@ -71,6 +71,12 @@ export default function GlobeCanvas({ cfg, beams, selectedId, onSelect, onBeamRe
       if (!els) return
       const isSel = beam.id === selId
 
+      if (beam.enabled === false) {
+        els.svgEl.attr('d', '')
+        els.tickEls.forEach(t => t.attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 0))
+        return
+      }
+
       // During drag, use the live drag position for the dragged beam
       let boreLat = beam.boreLat, boreLon = beam.boreLon
       if (g.drag && g.drag.mode === 'beam' && g.drag.beamId === beam.id) {
