@@ -1,6 +1,6 @@
 # Beam Editor — Architecture Reference
 
-**AxtaBEAMS GSO Beam Footprint Editor** · v1.1 · 2026-06-11
+**AxtaBEAMS GSO Beam Footprint Editor** · v1.2 · 2026-07-08
 
 Interactive tool for defining and visualising elliptical beam footprints from a geostationary (GSO) satellite. Renders on a rotatable, zoomable D3 orthographic globe. Supports up to 16 named beams, drag-to-repoint, and slant-range/elevation readouts.
 
@@ -42,9 +42,8 @@ beam-editor/
       colors.js           ← 16-colour palette + hexToRgba
     components/
       GlobeCanvas.jsx     ← D3 SVG globe, all pointer/keyboard input
-      BeamList.jsx        ← Horizontal tab bar (select / add / delete)
-      ControlPanel.jsx    ← Numeric inputs for cfg + selected beam
-      InfoBar.jsx         ← Boresight, elevation, slant-range readout
+      ParamPanel.jsx      ← Vertical param editor (left of globe): cfg + beam table
+      NumberInput.jsx     ← Shared uncontrolled numeric input (reset-safe on value change)
       HomeNav.jsx         ← Back-link to axta tools index
 ```
 
@@ -67,10 +66,12 @@ All mutable application state lives in a single `useReducer` in `App.jsx`. There
       id:      number,  // monotonically increasing, never reused
       boreLat: number,  // boresight geodetic latitude, degrees
       boreLon: number,  // boresight geodetic longitude, degrees
-      major:   number,  // half-beamwidth along major axis, degrees
-      minor:   number,  // half-beamwidth along minor axis, degrees
-      rot:     number,  // beam rotation from east, degrees (CCW positive)
-      color:   string,  // hex colour from COLORS palette
+      major:      number,  // half-beamwidth along major axis, degrees
+      minor:      number,  // half-beamwidth along minor axis, degrees
+      rot:        number,  // beam rotation from east, degrees (CCW positive)
+      elliptical: boolean, // false = circular editing (single beamwidth field, major===minor); true = independent major/minor/rot fields exposed in ParamPanel
+      enabled:    boolean, // false = beam is hidden from the globe render (footprint + ticks) but stays editable
+      color:      string,  // hex colour from COLORS palette
     }
   ],
   selectedId: number | null,
@@ -85,18 +86,18 @@ All mutable application state lives in a single `useReducer` in `App.jsx`. There
 | `ADD_BEAM` | `boreLat?` | Appends a new beam, cloned from the last beam's size/shape. Capped at `MAX_BEAMS = 16`. |
 | `DELETE_BEAM` | `id` | Removes beam; auto-selects the last remaining beam. |
 | `SELECT_BEAM` | `id` | Changes `selectedId`. |
-| `UPDATE_BEAM` | `id, patch` | Partial update (spread) of a beam object — used by `ControlPanel` and drag-end. |
+| `UPDATE_BEAM` | `id, patch` | Partial update (spread) of a beam object — used by `ParamPanel` (cfg/beamwidth/elliptical/enable edits) and drag-end. |
 | `SET_SAT_LON` | `value` | Updates `cfg.satLon` **and** shifts every beam's `boreLon` by the same delta, preserving each beam's relative longitude from the satellite. |
 | `SET_MIN_ELEV` | `value` | Updates `cfg.minElev` only; footprint is re-clipped on next redraw. |
 
 ### Data flow
 
 ```
-User input (drag, inputs, keyboard)
+User input (drag, inputs, keyboard, checkboxes)
         │
         ▼
-  GlobeCanvas / ControlPanel / BeamList
-        │   (callbacks: onSelect, onBeamDragEnd, onCfgChange, onBeamChange)
+  GlobeCanvas / ParamPanel
+        │   (callbacks: onSelect, onBeamRepoint, onCfgChange, onBeamChange, onAdd, onDelete)
         ▼
      App.jsx  dispatch(action)
         │
@@ -106,10 +107,8 @@ User input (drag, inputs, keyboard)
         ▼
   props flow down to all children
         │
-        ├──▶  GlobeCanvas  (useEffect → syncBeamElements + scheduleRedraw)
-        ├──▶  BeamList     (pure render)
-        ├──▶  InfoBar      (calls elevSlant() on selected beam)
-        └──▶  ControlPanel (pure render, keyed inputs for reset on beam change)
+        ├──▶  GlobeCanvas  (useEffect → syncBeamElements + scheduleRedraw; skips disabled beams)
+        └──▶  ParamPanel   (pure render; calls elevSlant() per beam row for the read-only columns)
 ```
 
 ---
@@ -289,29 +288,28 @@ Standard quadratic method on the scaled ellipsoid (`x²/a² + y²/a² + z²/b² 
 
 ### `App.jsx`
 
-Root component and sole owner of application state. Provides pure handler functions (`handleCfgChange`, `handleBeamChange`, `handleBeamDragEnd`) as named callbacks so child components remain agnostic of dispatch details.
+Root component and sole owner of application state. Provides pure handler functions (`handleCfgChange`, `handleBeamChange`, `handleBeamRepoint`) as named callbacks so child components remain agnostic of dispatch details. Renders `#main` as a flex row containing `ParamPanel` (left) and `GlobeCanvas` (right); the CSS collapses this to a column below 680px viewport width.
 
 ### `GlobeCanvas.jsx`
 
-Props: `cfg`, `beams`, `selectedId`, `onSelect`, `onBeamDragEnd`, `onUpdateCfgSatLon`
+Props: `cfg`, `beams`, `selectedId`, `onSelect`, `onBeamRepoint`
 
 Renders: `<div#globe-wrap> → <svg#globe> + zoom buttons + hint label`
 
 Side effects: resizes with window, registers global `keydown` for arrow nudge. Cleans up all listeners and pending `rAF` on unmount.
 
-`onUpdateCfgSatLon` is wired but currently unused by this component — reserved for a future "drag satellite" interaction.
+Beams with `enabled: false` are skipped in `redraw()` — their `<path>`/tick `<line>` elements are kept in the DOM (via `syncBeamElements`) but given an empty `d` / zeroed coordinates, so they're invisible and non-hittable without touching the sync lifecycle.
 
-### `BeamList.jsx`
+### `ParamPanel.jsx`
 
-Pure presentational. Horizontal scroll container of beam tabs. Each tab: colour swatch + `B{id}` label + delete button. Add button shows the count when at capacity (`MAX_BEAMS = 16`).
+The vertical parameter editor docked to the left of the globe (`#param-panel`). Two sections:
 
-### `ControlPanel.jsx`
+1. **Common params** — two `NumberInput` fields bound to `cfg.satLon` and `cfg.minElev`.
+2. **Beam table** (`#beam-table`) — one row per beam, columns: enable checkbox, auto-numbered index (`i + 1` from array position, not the stable `beam.id` — so numbering stays 1..N top-to-bottom even after deletions), colour swatch, read-only boresight/elevation/slant-range (via `elevSlant()`), an editable beamwidth `NumberInput` (writes `{major: v, minor: v}` together), an "Ell" checkbox, and a delete button. Checking "Ell" swaps the single beamwidth field for an "ellipt." label and inserts a detail `<tr>` below with independent Major/Minor/Rot `NumberInput`s. Unchecking it snaps `minor` back to `major` and collapses the detail row. All interactive controls call `e.stopPropagation()` so clicking them doesn't also trigger the row's `onSelect`.
 
-Five `NumberInput` fields, two of which bind to `cfg` (satLon, minElev) and three to the selected beam (major, minor, rot). Uses `key={value}` on each `<input>` to force unmount/remount when the selected beam changes — this resets the uncontrolled input's displayed value without making all inputs controlled (which degrades mobile UX due to forced re-renders on every keystroke).
+### `NumberInput.jsx`
 
-### `InfoBar.jsx`
-
-Calls `elevSlant(satLon, boreLat, boreLon)` from `lib/geodesy.js` on each render. Displays: boresight in `DDd.d°N/S DDd.d°E/W` format, elevation in degrees, slant range in km.
+Shared uncontrolled numeric input (used by both `ParamPanel` sections and the beam detail row). A `useEffect` writes `value` into the DOM node whenever it changes, unless the input is currently focused — this keeps the field editable while typing without needing `key`-based remounts, and without making the input fully controlled (which would hurt mobile input UX on every keystroke).
 
 ### `HomeNav.jsx`
 
@@ -341,6 +339,5 @@ The `#app` flex column fills the viewport height with no scroll: `header` and fo
 
 - **No URL persistence**: beam configuration is not encoded in the URL. A `URLSearchParams` serialiser would make sessions shareable (aligns with repo convention).
 - **No export**: no JSON/CSV/KML export of beam parameters or footprint polygons.
-- `onUpdateCfgSatLon` prop on `GlobeCanvas` is wired but unused — placeholder for a future "drag satellite along equator" gesture.
 - `SET_SAT_LON` shifts all beam boreLon by the delta but does **not** adjust the globe rotation to follow — the user must manually re-center the view.
 - The beam polygon uses `N_VERTS = 360` uniformly-spaced vertices. At large beamwidths (>10°) or near the horizon, the ellipse approximation degrades and explicit clipping artefacts may appear.

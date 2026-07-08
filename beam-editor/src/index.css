@@ -69,9 +69,19 @@ header h1  { font-size: 11px; letter-spacing: .18em; color: var(--accent); text-
 header .sub { font-size: 9px; color: var(--muted); letter-spacing: .08em; flex: 1; }
 header .ver { font-size: 9px; color: var(--border2); letter-spacing: .05em; }
 
+/* ── Main layout (param panel + globe) ──────────────────────────────────── */
+#main {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: row;
+}
+
+@media (max-width: 680px) {
+  #main { flex-direction: column; }
+}
+
 /* ── Globe ───────────────────────────────────────────────────────────────── */
 #globe-wrap {
-  flex: 1;
+  flex: 1; min-width: 0; min-height: 0;
   display: flex; align-items: center; justify-content: center;
   position: relative; overflow: hidden;
   background: var(--bg);
@@ -110,79 +120,101 @@ svg#globe { display: block; touch-action: none; }
   pointer-events: none; white-space: nowrap; opacity: .7;
 }
 
-/* ── Beam list ────────────────────────────────────────────────────────────── */
-#beam-list {
-  flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
-  overflow-x: auto;
-  display: flex; align-items: stretch;
-  min-height: 36px;
-}
-.beam-tab {
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 8px;
+/* ── Param panel (left of globe) ─────────────────────────────────────────── */
+#param-panel {
+  flex-shrink: 0; width: 300px;
+  display: flex; flex-direction: column; gap: 10px;
   border-right: 1px solid var(--border);
-  cursor: pointer; white-space: nowrap; flex-shrink: 0;
-  font-size: 11px; font-weight: bold;
-  color: var(--muted); background: var(--bg);
-  -webkit-tap-highlight-color: transparent;
-}
-.beam-tab.active { background: var(--panel); color: var(--text); }
-.beam-tab .swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.beam-tab .del-btn {
-  font-size: 13px; line-height: 1;
-  color: var(--muted); cursor: pointer; padding: 2px 1px;
-  -webkit-tap-highlight-color: transparent;
-}
-.beam-tab .del-btn:active { color: var(--accent2); }
-
-#add-beam-btn {
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 12px; font-size: 18px; font-weight: bold;
-  color: var(--accent); cursor: pointer; flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-#add-beam-btn:active { background: var(--track); }
-#add-beam-btn.disabled { color: var(--border2); pointer-events: none; }
-
-/* ── Info bar ────────────────────────────────────────────────────────────── */
-#info {
-  flex-shrink: 0;
-  display: grid; grid-template-columns: repeat(3,1fr);
-  border-top: 1px solid var(--border);
-  background: var(--border); gap: 1px;
-}
-.info-cell {
-  background: var(--panel); padding: 5px 8px;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.info-cell .lbl { font-size: 7px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
-.info-cell .val { font-size: 11px; color: var(--accent); font-weight: bold; }
-.info-cell .val.red { color: var(--accent2); }
-
-/* ── Controls ────────────────────────────────────────────────────────────── */
-#controls {
-  flex-shrink: 0; display: flex;
-  border-top: 1px solid var(--border);
   background: var(--panel);
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0));
+  overflow-y: auto;
+  touch-action: pan-y;
 }
-.ctrl {
-  flex: 1; display: flex; flex-direction: column; gap: 2px;
-  padding: 5px 6px; border-right: 1px solid var(--border);
+
+@media (max-width: 680px) {
+  #param-panel {
+    width: 100%; max-height: 46vh;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
 }
-.ctrl:last-child { border-right: none; }
-.ctrl .lbl { font-size: 7px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-.ctrl input[type=number] {
+
+.panel-h {
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 600;
+}
+
+/* Common params */
+#common-params { flex-shrink: 0; }
+.param-row { display: flex; gap: 8px; margin-top: 6px; }
+.param-row .num-field { flex: 1; }
+
+/* Shared number field (also used inside the beam table) */
+.num-field { display: flex; flex-direction: column; gap: 2px; }
+.num-field .lbl { font-size: 7px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.num-field input[type=number] {
   width: 100%;
   font-family: var(--font-mono);
-  font-size: 16px; font-weight: bold;
+  font-size: 14px; font-weight: bold;
   color: var(--accent); background: var(--bg);
   border: 1px solid var(--border); border-radius: 3px;
   padding: 3px 4px; outline: none;
   -moz-appearance: textfield;
 }
-.ctrl input[type=number]::-webkit-inner-spin-button,
-.ctrl input[type=number]::-webkit-outer-spin-button { opacity: 1; height: 22px; }
-.ctrl input[type=number]:focus { border-color: var(--accent); }
+.num-field input[type=number]::-webkit-inner-spin-button,
+.num-field input[type=number]::-webkit-outer-spin-button { opacity: 1; height: 18px; }
+.num-field input[type=number]:focus { border-color: var(--accent); }
+.num-field--compact input[type=number] { font-size: 11px; padding: 2px 3px; }
+
+/* Beam section */
+#beam-section { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.beam-section-head { display: flex; align-items: center; justify-content: space-between; }
+#add-beam-btn {
+  font-family: var(--font-mono); font-size: 10px; font-weight: bold;
+  letter-spacing: .04em; color: var(--accent);
+  background: var(--bg); border: 1px solid var(--border2); border-radius: 4px;
+  padding: 4px 8px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#add-beam-btn:active { background: var(--track); }
+#add-beam-btn.disabled, #add-beam-btn:disabled { color: var(--border2); pointer-events: none; }
+
+.beam-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 4px; }
+
+#beam-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+#beam-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--track); color: var(--muted);
+  font-size: 7px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600;
+  padding: 4px 3px; text-align: left; border-bottom: 1px solid var(--border2);
+}
+#beam-table .c-en, #beam-table .c-ell, #beam-table .c-del { text-align: center; width: 20px; }
+#beam-table .c-num { width: 28px; }
+
+.beam-row { border-bottom: 1px solid var(--border); cursor: pointer; }
+.beam-row td { padding: 3px; vertical-align: middle; color: var(--text); }
+.beam-row.selected { background: rgba(26, 106, 181, 0.09); }
+.beam-row.disabled { opacity: 0.4; }
+.beam-row .c-en, .beam-row .c-ell, .beam-row .c-del { text-align: center; }
+
+.beam-row input[type=checkbox] { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+
+.c-num { font-weight: bold; white-space: nowrap; }
+.c-num .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
+
+.c-bore { font-size: 9px; white-space: nowrap; color: var(--muted); }
+.c-elev, .c-slant { font-weight: bold; color: var(--accent2); white-space: nowrap; }
+
+.bw-ell { font-size: 9px; color: var(--muted); font-style: italic; }
+
+.del-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1; color: var(--muted); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.del-btn:active { color: var(--accent2); }
+
+.beam-detail-row { background: var(--bg); border-bottom: 1px solid var(--border); }
+.beam-detail-row.selected { background: rgba(26, 106, 181, 0.06); }
+.beam-detail-row td { padding: 4px 6px 6px; }
+.detail-fields { display: flex; gap: 6px; }
+.detail-fields .num-field { flex: 1; }
